@@ -1,0 +1,961 @@
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
+import 'chart.js/auto';
+import api from './axiosConfig';
+
+function AdvancedDashboard() {
+  const [lbMetrics, setLbMetrics] = useState(null);
+  const [rdsMetrics, setRdsMetrics] = useState(null);
+  const [vpcStats, setVpcStats] = useState(null);
+  const [asgMetrics, setAsgMetrics] = useState(null);
+  const [mlMetrics, setMlMetrics] = useState(null);
+  const [threatClassifications, setThreatClassifications] = useState(null);
+  const [securityEvents, setSecurityEvents] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(null);
+  const [timeRange, setTimeRange] = useState('1h');
+  const navigate = useNavigate();
+
+  // Generate mock timestamps for charts
+  const generateMockTimestamps = (count, intervalMinutes = 5) => {
+    const timestamps = [];
+    for (let i = count - 1; i >= 0; i--) {
+      const time = new Date(Date.now() - i * intervalMinutes * 60000);
+      timestamps.push(time.toISOString());
+    }
+    return timestamps;
+  };
+
+  // Generate mock metric data
+  const generateMockMetric = (label, baseValue, variance, count = 12) => ({
+    Label: label,
+    Values: Array.from({ length: count }, () => 
+      Math.max(0, baseValue + (Math.random() - 0.5) * variance)
+    ),
+    Timestamps: generateMockTimestamps(count)
+  });
+
+  // Generate mock data for all services
+  const generateMockData = () => {
+    // Load Balancer Metrics
+    const mockLbMetrics = {
+      RequestCount: generateMockMetric('Request Count', 1500, 800, 12),
+      TargetResponseTime: generateMockMetric('Response Time (ms)', 120, 50, 12),
+      HealthyHostCount: generateMockMetric('Healthy Hosts', 4, 1, 12),
+      UnHealthyHostCount: generateMockMetric('Unhealthy Hosts', 0, 1, 12),
+      HTTPCode_Target_2XX_Count: generateMockMetric('2XX Responses', 1400, 600, 12),
+      HTTPCode_Target_5XX_Count: generateMockMetric('5XX Errors', 15, 20, 12)
+    };
+
+    // RDS Metrics
+    const mockRdsMetrics = {
+      CPUUtilization: generateMockMetric('CPU Utilization (%)', 45, 25, 12),
+      DatabaseConnections: generateMockMetric('DB Connections', 35, 15, 12),
+      ReadIOPS: generateMockMetric('Read IOPS', 2500, 1000, 12),
+      WriteIOPS: generateMockMetric('Write IOPS', 800, 400, 12),
+      FreeableMemory: generateMockMetric('Freeable Memory (bytes)', 2147483648, 536870912, 12),
+      DiskQueueDepth: generateMockMetric('Disk Queue Depth', 2.5, 1.5, 12)
+    };
+
+    // VPC Stats
+    const mockVpcStats = {
+      total_flows: 450230,
+      accepted_flows: 398450,
+      rejected_flows: 51780,
+      byte_transfer: 15680345600, // ~14.6 GB
+      top_sources: [
+        ['10.0.1.15', 12450],
+        ['10.0.2.23', 9875],
+        ['10.0.1.8', 8640],
+        ['192.168.1.100', 7320],
+        ['10.0.3.45', 6890],
+        ['172.16.0.12', 5450],
+        ['10.0.1.200', 4890],
+        ['192.168.1.50', 4320]
+      ],
+      top_destinations: [
+        ['10.0.1.10', 15680],
+        ['10.0.2.15', 12340],
+        ['10.0.1.5', 11230],
+        ['192.168.1.1', 9870],
+        ['10.0.3.20', 8760],
+        ['172.16.0.5', 7650],
+        ['10.0.1.100', 6540],
+        ['192.168.1.10', 5430]
+      ],
+      top_ports: [
+        [80, 89450],
+        [443, 78960],
+        [22, 12340],
+        [3306, 8970],
+        [5432, 6780],
+        [8080, 5670],
+        [25, 3450],
+        [53, 2340]
+      ]
+    };
+
+    // Auto Scaling Group Metrics
+    const mockAsgMetrics = {
+      GroupDesiredCapacity: generateMockMetric('Desired Capacity', 3, 1, 12),
+      GroupInServiceInstances: generateMockMetric('In-Service Instances', 3, 1, 12),
+      GroupTotalInstances: generateMockMetric('Total Instances', 3, 1, 12)
+    };
+
+    // ML Service Metrics
+    const mockMlMetrics = {
+      'ModelLatency (ms)': generateMockMetric('Model Latency (ms)', 250, 100, 12),
+      Invocations: generateMockMetric('Invocations', 850, 300, 12),
+      CPUUtilization: generateMockMetric('CPU Utilization (%)', 65, 20, 12),
+      MemoryUtilization: generateMockMetric('Memory Utilization (%)', 42, 15, 12)
+    };
+
+    // Threat Classifications
+    const mockThreatClassifications = {
+      last_hour: [
+        { category: 'Malware Detection', count: 1247 },
+        { category: 'Suspicious Login Activity', count: 892 },
+        { category: 'SQL Injection Attempt', count: 634 },
+        { category: 'Cross-Site Scripting (XSS)', count: 445 },
+        { category: 'Brute Force Attack', count: 387 },
+        { category: 'Port Scanning', count: 298 },
+        { category: 'DDoS Attack Pattern', count: 234 },
+        { category: 'Data Exfiltration Attempt', count: 189 },
+        { category: 'Privilege Escalation', count: 156 },
+        { category: 'Unauthorized API Access', count: 123 },
+        { category: 'File Upload Vulnerability', count: 98 }
+      ],
+      last_day: [
+        { category: 'Malware Detection', count: 28940 },
+        { category: 'Suspicious Login Activity', count: 21340 },
+        { category: 'SQL Injection Attempt', count: 15230 },
+        { category: 'Cross-Site Scripting (XSS)', count: 10680 },
+        { category: 'Brute Force Attack', count: 9290 },
+        { category: 'Port Scanning', count: 7150 },
+        { category: 'DDoS Attack Pattern', count: 5620 },
+        { category: 'Data Exfiltration Attempt', count: 4530 },
+        { category: 'Privilege Escalation', count: 3740 },
+        { category: 'Unauthorized API Access', count: 2950 },
+        { category: 'File Upload Vulnerability', count: 2350 }
+      ]
+    };
+
+    // Security Events
+    const mockSecurityEvents = [
+      { event: 'Failed SSH authentication attempts', last_hour: 1456, last_day: 34944 },
+      { event: 'HTTP 403 Forbidden responses', last_hour: 892, last_day: 21408 },
+      { event: 'Unusual outbound data volume', last_hour: 634, last_day: 15216 },
+      { event: 'Multiple failed login attempts', last_hour: 445, last_day: 10680 },
+      { event: 'Suspicious user agent strings', last_hour: 387, last_day: 9288 },
+      { event: 'Blocked malicious IP addresses', last_hour: 298, last_day: 7152 },
+      { event: 'WAF rule violations', last_hour: 234, last_day: 5616 },
+      { event: 'Privilege escalation attempts', last_hour: 189, last_day: 4536 },
+      { event: 'Unauthorized file access', last_hour: 156, last_day: 3744 },
+      { event: 'Database connection anomalies', last_hour: 123, last_day: 2952 },
+      { event: 'SSL/TLS handshake failures', last_hour: 98, last_day: 2352 }
+    ];
+
+    return {
+      lbMetrics: mockLbMetrics,
+      rdsMetrics: mockRdsMetrics,
+      vpcStats: mockVpcStats,
+      asgMetrics: mockAsgMetrics,
+      mlMetrics: mockMlMetrics,
+      threatClassifications: mockThreatClassifications,
+      securityEvents: mockSecurityEvents
+    };
+  };
+
+  // Fetch all monitoring data
+  const fetchAllData = async () => {
+    try {
+      // Use mock data instead of API calls
+      const mockData = generateMockData();
+      
+      setLbMetrics(mockData.lbMetrics);
+      setRdsMetrics(mockData.rdsMetrics);
+      setVpcStats(mockData.vpcStats);
+      setAsgMetrics(mockData.asgMetrics);
+      setMlMetrics(mockData.mlMetrics);
+      setThreatClassifications(mockData.threatClassifications);
+      setSecurityEvents(mockData.securityEvents);
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to generate mock data:', error);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllData();
+    
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchAllData, 30000);
+    setRefreshInterval(interval);
+    
+    return () => {
+      if (refreshInterval) clearInterval(refreshInterval);
+    };
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
+  // Chart configuration for dark theme
+  const darkChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        labels: {
+          color: '#9CA3AF',
+          font: { size: 11 }
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#374151', drawBorder: false },
+        ticks: { color: '#9CA3AF', font: { size: 10 } }
+      },
+      y: {
+        grid: { color: '#374151', drawBorder: false },
+        ticks: { color: '#9CA3AF', font: { size: 10 } }
+      }
+    }
+  };
+
+  const barChartOptions = {
+    ...darkChartOptions,
+    indexAxis: 'y',
+    plugins: {
+      legend: { display: false }
+    }
+  };
+
+  const doughnutOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          color: '#9CA3AF',
+          font: { size: 10 },
+          boxWidth: 12
+        }
+      }
+    }
+  };
+
+  // Generate chart data
+  const generateLineChart = (metric, color) => {
+    if (!metric) return null;
+    
+    return {
+      labels: metric.Timestamps?.map(t => 
+        new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      ) || [],
+      datasets: [{
+        label: metric.Label,
+        data: metric.Values || [],
+        borderColor: color,
+        backgroundColor: `${color}33`,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 4
+      }]
+    };
+  };
+
+  const generateMultiLineChart = (metrics, colors) => {
+    if (!metrics || metrics.length === 0) return null;
+    
+    const firstMetric = Object.values(metrics)[0];
+    
+    return {
+      labels: firstMetric.Timestamps?.map(t => 
+        new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      ) || [],
+      datasets: Object.entries(metrics).map(([key, metric], idx) => ({
+        label: metric.Label,
+        data: metric.Values || [],
+        borderColor: colors[idx % colors.length],
+        backgroundColor: `${colors[idx % colors.length]}33`,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 4
+      }))
+    };
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading Security Dashboard...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-gray-100">
+      {/* Header */}
+      <header className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <h1 className="text-xl font-bold text-blue-400">⚡Advanced SIEM</h1>
+          <div className="flex items-center space-x-2 text-sm">
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-gray-400">Live Data</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-4">
+          <select 
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="bg-gray-700 text-gray-200 px-3 py-1 rounded text-sm border border-gray-600"
+          >
+            <option value="1h">Last 1 Hour</option>
+            <option value="6h">Last 6 Hours</option>
+            <option value="24h">Last 24 Hours</option>
+            <option value="7d">Last 7 Days</option>
+          </select>
+          
+          <button
+            onClick={fetchAllData}
+            className="bg-blue-600 hover:bg-blue-700 px-4 py-1 rounded text-sm"
+          >
+            Refresh
+          </button>
+          
+          <button
+            onClick={handleLogout}
+            className="bg-red-600 hover:bg-red-700 px-4 py-1 rounded text-sm"
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+
+      {/* Navigation Tabs */}
+      <div className="bg-gray-800 border-b border-gray-700 px-6">
+        <div className="flex space-x-1">
+          <button className="px-4 py-2 bg-gray-700 text-white border-b-2 border-blue-500">
+            Dashboard
+          </button>
+          <Link to="/brute-force-detection" className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
+            Threat Detection
+          </Link>
+          <button className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
+            Alarms
+          </button>
+          <button className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
+            Cases
+          </button>
+          <button className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
+            Searches
+          </button>
+          <button className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
+            Reports
+          </button>
+        </div>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* Top Row - Threat Classifications */}
+        <div className="grid grid-cols-3 gap-6">
+          {/* Top Classification - Last 1 Hour */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">Top Classification</h3>
+              <span className="text-xs text-gray-500">Last 1 Hour</span>
+            </div>
+            <div className="space-y-1">
+              {threatClassifications?.last_hour.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400 truncate flex-1">{item.category}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-gray-200 font-medium">{item.count}</span>
+                    <div className="w-16 bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-blue-500 h-2 rounded-full"
+                        style={{ width: `${(item.count / threatClassifications.last_hour[0].count) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Classification - Last 1 Day */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">Top Classification</h3>
+              <span className="text-xs text-gray-500">Last 1 Day</span>
+            </div>
+            <div className="space-y-1">
+              {threatClassifications?.last_day.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400 truncate flex-1">{item.category}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-gray-200 font-medium">{item.count}</span>
+                    <div className="w-16 bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-orange-500 h-2 rounded-full"
+                        style={{ width: `${(item.count / threatClassifications.last_day[0].count) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Log Source */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">Top Log Source</h3>
+              <span className="text-xs text-gray-500">Last 1 Hour</span>
+            </div>
+            <div className="h-48">
+              {vpcStats && (
+                <Line
+                  data={{
+                    labels: Array.from({ length: 30 }, (_, i) => {
+                      const time = new Date(Date.now() - (29 - i) * 60000);
+                      return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }),
+                    datasets: [
+                      {
+                        label: 'VPC Flow Logs',
+                        data: Array.from({ length: 30 }, () => Math.random() * 200 + 50),
+                        borderColor: '#10B981',
+                        backgroundColor: '#10B98133',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                      },
+                      {
+                        label: 'ALB Logs',
+                        data: Array.from({ length: 30 }, () => Math.random() * 150 + 80),
+                        borderColor: '#3B82F6',
+                        backgroundColor: '#3B82F633',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                      },
+                      {
+                        label: 'RDS Logs',
+                        data: Array.from({ length: 30 }, () => Math.random() * 100 + 30),
+                        borderColor: '#F59E0B',
+                        backgroundColor: '#F59E0B33',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                      }
+                    ]
+                  }}
+                  options={darkChartOptions}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Second Row - Common Events and Log Sources */}
+        <div className="grid grid-cols-3 gap-6">
+          {/* Top Common Event - Last 1 Hour */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">Top Common Event</h3>
+              <span className="text-xs text-gray-500">Last 1 Hour</span>
+            </div>
+            <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
+              {securityEvents?.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs py-1">
+                  <span className="text-gray-400 truncate flex-1 pr-2">{item.event}</span>
+                  <span className="text-gray-200 font-medium min-w-[40px] text-right">{item.last_hour}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Common Event - Last 1 Day */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">Top Common Event</h3>
+              <span className="text-xs text-gray-500">Last 1 Day</span>
+            </div>
+            <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
+              {securityEvents?.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs py-1">
+                  <span className="text-gray-400 truncate flex-1 pr-2">{item.event}</span>
+                  <span className="text-gray-200 font-medium min-w-[50px] text-right">{item.last_day}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Additional Log Source Chart */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">Top Log Source</h3>
+              <span className="text-xs text-gray-500">Last 1 Day</span>
+            </div>
+            <div className="h-48">
+              <Line
+                data={{
+                  labels: Array.from({ length: 24 }, (_, i) => {
+                    const time = new Date(Date.now() - (23 - i) * 3600000);
+                    return time.getHours() + ':00';
+                  }),
+                  datasets: [
+                    {
+                      label: 'CloudTrail',
+                      data: Array.from({ length: 24 }, () => Math.random() * 300 + 100),
+                      borderColor: '#8B5CF6',
+                      borderWidth: 2,
+                      fill: false,
+                      tension: 0.4,
+                      pointRadius: 0
+                    },
+                    {
+                      label: 'WAF Logs',
+                      data: Array.from({ length: 24 }, () => Math.random() * 250 + 80),
+                      borderColor: '#EC4899',
+                      borderWidth: 2,
+                      fill: false,
+                      tension: 0.4,
+                      pointRadius: 0
+                    },
+                    {
+                      label: 'GuardDuty',
+                      data: Array.from({ length: 24 }, () => Math.random() * 150 + 50),
+                      borderColor: '#14B8A6',
+                      borderWidth: 2,
+                      fill: false,
+                      tension: 0.4,
+                      pointRadius: 0
+                    }
+                  ]
+                }}
+                options={darkChartOptions}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* AWS Load Balancer Metrics */}
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+          <h2 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
+            <span className="text-blue-400 mr-2">📊</span>
+            Application Load Balancer Metrics
+          </h2>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Request Count</h4>
+              <div className="h-32">
+                {lbMetrics?.RequestCount && (
+                  <Line data={generateLineChart(lbMetrics.RequestCount, '#10B981')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+            
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Target Response Time</h4>
+              <div className="h-32">
+                {lbMetrics?.TargetResponseTime && (
+                  <Line data={generateLineChart(lbMetrics.TargetResponseTime, '#3B82F6')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+            
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Healthy vs Unhealthy Hosts</h4>
+              <div className="h-32">
+                {lbMetrics?.HealthyHostCount && lbMetrics?.UnHealthyHostCount && (
+                  <Line 
+                    data={{
+                      labels: lbMetrics.HealthyHostCount.Timestamps.map(t => 
+                        new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      ),
+                      datasets: [
+                        {
+                          label: 'Healthy',
+                          data: lbMetrics.HealthyHostCount.Values,
+                          borderColor: '#10B981',
+                          backgroundColor: '#10B98133',
+                          borderWidth: 2,
+                          fill: true,
+                          tension: 0.4,
+                          pointRadius: 0
+                        },
+                        {
+                          label: 'Unhealthy',
+                          data: lbMetrics.UnHealthyHostCount.Values,
+                          borderColor: '#EF4444',
+                          backgroundColor: '#EF444433',
+                          borderWidth: 2,
+                          fill: true,
+                          tension: 0.4,
+                          pointRadius: 0
+                        }
+                      ]
+                    }}
+                    options={darkChartOptions}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">HTTP 2XX Responses</h4>
+              <div className="h-32">
+                {lbMetrics?.HTTPCode_Target_2XX_Count && (
+                  <Line data={generateLineChart(lbMetrics.HTTPCode_Target_2XX_Count, '#10B981')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">HTTP 5XX Errors</h4>
+              <div className="h-32">
+                {lbMetrics?.HTTPCode_Target_5XX_Count && (
+                  <Line data={generateLineChart(lbMetrics.HTTPCode_Target_5XX_Count, '#EF4444')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Response Codes Distribution</h4>
+              <div className="h-32 flex items-center justify-center">
+                {lbMetrics?.HTTPCode_Target_2XX_Count && (
+                  <Doughnut
+                    data={{
+                      labels: ['2XX Success', '5XX Errors', 'Other'],
+                      datasets: [{
+                        data: [
+                          lbMetrics.HTTPCode_Target_2XX_Count.Values.reduce((a, b) => a + b, 0),
+                          lbMetrics.HTTPCode_Target_5XX_Count.Values.reduce((a, b) => a + b, 0),
+                          50
+                        ],
+                        backgroundColor: ['#10B981', '#EF4444', '#F59E0B'],
+                        borderColor: '#1F2937',
+                        borderWidth: 2
+                      }]
+                    }}
+                    options={doughnutOptions}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RDS Database Metrics */}
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+          <h2 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
+            <span className="text-purple-400 mr-2">🗄️</span>
+            RDS Database Metrics
+          </h2>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">CPU Utilization (%)</h4>
+              <div className="h-32">
+                {rdsMetrics?.CPUUtilization && (
+                  <Line data={generateLineChart(rdsMetrics.CPUUtilization, '#8B5CF6')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Database Connections</h4>
+              <div className="h-32">
+                {rdsMetrics?.DatabaseConnections && (
+                  <Line data={generateLineChart(rdsMetrics.DatabaseConnections, '#3B82F6')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Read IOPS</h4>
+              <div className="h-32">
+                {rdsMetrics?.ReadIOPS && (
+                  <Line data={generateLineChart(rdsMetrics.ReadIOPS, '#10B981')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Write IOPS</h4>
+              <div className="h-32">
+                {rdsMetrics?.WriteIOPS && (
+                  <Line data={generateLineChart(rdsMetrics.WriteIOPS, '#F59E0B')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Freeable Memory (GB)</h4>
+              <div className="h-32">
+                {rdsMetrics?.FreeableMemory && (
+                  <Line 
+                    data={generateLineChart({
+                      ...rdsMetrics.FreeableMemory,
+                      Values: rdsMetrics.FreeableMemory.Values.map(v => (v / 1073741824).toFixed(2))
+                    }, '#06B6D4')} 
+                    options={darkChartOptions} 
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-2">Disk Queue Depth</h4>
+              <div className="h-32">
+                {rdsMetrics?.DiskQueueDepth && (
+                  <Line data={generateLineChart(rdsMetrics.DiskQueueDepth, '#EC4899')} options={darkChartOptions} />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* VPC Flow Analysis */}
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+          <h2 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
+            <span className="text-green-400 mr-2">🌐</span>
+            VPC Network Traffic Analysis
+          </h2>
+          <div className="grid grid-cols-4 gap-4">
+            {/* Summary Cards */}
+            <div className="bg-gray-900 rounded p-4 border border-gray-700">
+              <div className="text-xs text-gray-400 mb-1">Total Flows</div>
+              <div className="text-2xl font-bold text-blue-400">{vpcStats?.total_flows.toLocaleString()}</div>
+              <div className="text-xs text-gray-500 mt-1">Network connections</div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-4 border border-gray-700">
+              <div className="text-xs text-gray-400 mb-1">Accepted Flows</div>
+              <div className="text-2xl font-bold text-green-400">{vpcStats?.accepted_flows.toLocaleString()}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {vpcStats && ((vpcStats.accepted_flows / vpcStats.total_flows) * 100).toFixed(1)}% success rate
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-4 border border-gray-700">
+              <div className="text-xs text-gray-400 mb-1">Rejected Flows</div>
+              <div className="text-2xl font-bold text-red-400">{vpcStats?.rejected_flows.toLocaleString()}</div>
+              <div className="text-xs text-gray-500 mt-1">Security violations</div>
+            </div>
+
+            <div className="bg-gray-900 rounded p-4 border border-gray-700">
+              <div className="text-xs text-gray-400 mb-1">Data Transfer</div>
+              <div className="text-2xl font-bold text-purple-400">
+                {vpcStats && (vpcStats.byte_transfer / 1073741824).toFixed(2)} GB
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Total bandwidth</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            {/* Top Source IPs */}
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-3">Top Source IPs</h4>
+              <div className="space-y-2">
+                {vpcStats?.top_sources.slice(0, 8).map(([ip, count], idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <span className="text-gray-300 font-mono">{ip}</span>
+                    <span className="text-blue-400">{count.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Destination IPs */}
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-3">Top Destination IPs</h4>
+              <div className="space-y-2">
+                {vpcStats?.top_destinations.slice(0, 8).map(([ip, count], idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <span className="text-gray-300 font-mono">{ip}</span>
+                    <span className="text-green-400">{count.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Ports */}
+            <div className="bg-gray-900 rounded p-3 border border-gray-700">
+              <h4 className="text-xs text-gray-400 mb-3">Top Destination Ports</h4>
+              <div className="space-y-2">
+                {vpcStats?.top_ports.map(([port, count], idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <span className="text-gray-300 font-mono">Port {port}</span>
+                    <span className="text-purple-400">{count.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Auto Scaling & ML Services */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* Auto Scaling Group */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <h2 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
+              <span className="text-yellow-400 mr-2">⚙️</span>
+              Auto Scaling Group Status
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                <h4 className="text-xs text-gray-400 mb-2">Desired Capacity</h4>
+                <div className="h-32">
+                  {asgMetrics?.GroupDesiredCapacity && (
+                    <Line data={generateLineChart(asgMetrics.GroupDesiredCapacity, '#F59E0B')} options={darkChartOptions} />
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                <h4 className="text-xs text-gray-400 mb-2">In-Service Instances</h4>
+                <div className="h-32">
+                  {asgMetrics?.GroupInServiceInstances && (
+                    <Line data={generateLineChart(asgMetrics.GroupInServiceInstances, '#10B981')} options={darkChartOptions} />
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-900 rounded p-3 border border-gray-700 col-span-2">
+                <h4 className="text-xs text-gray-400 mb-2">Total Instances</h4>
+                <div className="h-32">
+                  {asgMetrics?.GroupTotalInstances && (
+                    <Line data={generateLineChart(asgMetrics.GroupTotalInstances, '#3B82F6')} options={darkChartOptions} />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ML Service (SageMaker) */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <h2 className="text-lg font-semibold text-gray-200 mb-4 flex items-center">
+              <span className="text-pink-400 mr-2">🤖</span>
+              ML Service (SageMaker) Metrics
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                <h4 className="text-xs text-gray-400 mb-2">Model Latency (ms)</h4>
+                <div className="h-32">
+                  {mlMetrics?.['ModelLatency (ms)'] && (
+                    <Line data={generateLineChart(mlMetrics['ModelLatency (ms)'], '#EC4899')} options={darkChartOptions} />
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                <h4 className="text-xs text-gray-400 mb-2">Invocations</h4>
+                <div className="h-32">
+                  {mlMetrics?.Invocations && (
+                    <Line data={generateLineChart(mlMetrics.Invocations, '#8B5CF6')} options={darkChartOptions} />
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                <h4 className="text-xs text-gray-400 mb-2">CPU Utilization (%)</h4>
+                <div className="h-32">
+                  {mlMetrics?.CPUUtilization && (
+                    <Line data={generateLineChart(mlMetrics.CPUUtilization, '#3B82F6')} options={darkChartOptions} />
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                <h4 className="text-xs text-gray-400 mb-2">Memory Utilization (%)</h4>
+                <div className="h-32">
+                  {mlMetrics?.MemoryUtilization && (
+                    <Line data={generateLineChart(mlMetrics.MemoryUtilization, '#10B981')} options={darkChartOptions} />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-4 gap-4">
+          <Link
+            to="/brute-force-detection"
+            className="bg-red-900 bg-opacity-20 border-2 border-red-500 rounded-lg p-4 hover:bg-opacity-30 transition-all"
+          >
+            <div className="text-red-400 text-2xl mb-2">🔒</div>
+            <div className="text-white font-semibold">Brute Force Detection</div>
+            <div className="text-gray-400 text-sm mt-1">Analyze SSH attack patterns</div>
+          </Link>
+
+          <Link
+            to="/ddos-detection"
+            className="bg-orange-900 bg-opacity-20 border-2 border-orange-500 rounded-lg p-4 hover:bg-opacity-30 transition-all"
+          >
+            <div className="text-orange-400 text-2xl mb-2">⚡</div>
+            <div className="text-white font-semibold">DDoS Detection</div>
+            <div className="text-gray-400 text-sm mt-1">Monitor traffic anomalies</div>
+          </Link>
+
+          <button
+            className="bg-blue-900 bg-opacity-20 border-2 border-blue-500 rounded-lg p-4 hover:bg-opacity-30 transition-all text-left"
+          >
+            <div className="text-blue-400 text-2xl mb-2">📊</div>
+            <div className="text-white font-semibold">Custom Reports</div>
+            <div className="text-gray-400 text-sm mt-1">Generate security reports</div>
+          </button>
+
+          <button
+            className="bg-purple-900 bg-opacity-20 border-2 border-purple-500 rounded-lg p-4 hover:bg-opacity-30 transition-all text-left"
+          >
+            <div className="text-purple-400 text-2xl mb-2">⚙️</div>
+            <div className="text-white font-semibold">Configuration</div>
+            <div className="text-gray-400 text-sm mt-1">Manage alert settings</div>
+          </button>
+        </div>
+      </div>
+
+      {/* Custom Scrollbar Styles */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #1F2937;
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #4B5563;
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #6B7280;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default AdvancedDashboard;
