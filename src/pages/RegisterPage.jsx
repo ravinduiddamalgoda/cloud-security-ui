@@ -12,11 +12,18 @@ function RegisterPage() {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:3500/register', { name, email, password });
-      setMessage(response.data.message);
-      navigate('/login'); // Navigate to login after successful registration
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/register`,
+        { name, email, password }
+      );
+      
+      setMessage(response.data.message || 'Registration successful! Please login.');
+      // Redirect to login after 1.5 seconds
+      setTimeout(() => {
+        navigate('/login');
+      }, 1500);
     } catch (error) {
-      setMessage(error.response?.data?.message || 'Registration failed');
+      setMessage(error.response?.data?.message || 'Registration failed. Please try again.');
     }
   };
 

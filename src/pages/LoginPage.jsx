@@ -11,18 +11,25 @@ function LoginPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:3500/login', { email, password });
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/login`,
+        { email, password }
+      );
+      
       if (response && response.data) {
-        setMessage(response.data.message);
-        localStorage.setItem('isAuthenticated', true);
+        // Store JWT token and authentication data
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('user', JSON.stringify(response.data.user));
+        
+        setMessage('Login successful!');
+        navigate('/');
       } else {
         setMessage('Unexpected response from server.');
       }
-      navigate('/');
     } catch (error) {
       console.error("Login error:", error);
-      setMessage(error.response?.data?.message || 'Login failed');
+      setMessage(error.response?.data?.message || 'Login failed. Please try again.');
     }
   };
   

@@ -4,6 +4,9 @@ import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import 'chart.js/auto';
 import api from './api/apiClient'; // Use protected API client with JWT
 
+// Configuration: Set to true to use mock data, false to use real API
+const USE_MOCK_DATA = false;
+
 function AdvancedDashboard() {
   const [lbMetrics, setLbMetrics] = useState(null);
   const [rdsMetrics, setRdsMetrics] = useState(null);
@@ -13,39 +16,214 @@ function AdvancedDashboard() {
   const [threatClassifications, setThreatClassifications] = useState(null);
   const [securityEvents, setSecurityEvents] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [refreshInterval, setRefreshInterval] = useState(null);
   const [timeRange, setTimeRange] = useState('1h');
   const navigate = useNavigate();
 
-  // Fetch all monitoring data from backend API
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
-    console.log('Fetching data from backend API...');
-    
-    // Fetch all endpoints independently - don't fail if one fails
-    await Promise.allSettled([
-      fetchALBMetrics(),
-      fetchRDSMetrics(),
-      fetchVPCStats(),
-      fetchASGMetrics(),
-      fetchSageMakerMetrics(),
-      fetchThreatClassifications(),
-      fetchSecurityEvents()
-    ]);
-    
-    setLoading(false);
+  // Generate mock timestamps for charts
+  const generateMockTimestamps = (count, intervalMinutes = 5) => {
+    const timestamps = [];
+    for (let i = count - 1; i >= 0; i--) {
+      const time = new Date(Date.now() - i * intervalMinutes * 60000);
+      timestamps.push(time.toISOString());
+    }
+    return timestamps;
   };
 
-  // API call functions - don't throw errors, just log them
+  // Generate mock metric data
+  const generateMockMetric = (label, baseValue, variance, count = 12) => ({
+    Label: label,
+    Values: Array.from({ length: count }, () => 
+      Math.max(0, baseValue + (Math.random() - 0.5) * variance)
+    ),
+    Timestamps: generateMockTimestamps(count)
+  });
+
+  // Generate mock data for all services
+  const generateMockData = () => {
+    // Load Balancer Metrics
+    const mockLbMetrics = {
+      RequestCount: generateMockMetric('Request Count', 1500, 800, 12),
+      TargetResponseTime: generateMockMetric('Response Time (ms)', 120, 50, 12),
+      HealthyHostCount: generateMockMetric('Healthy Hosts', 4, 1, 12),
+      UnHealthyHostCount: generateMockMetric('Unhealthy Hosts', 0, 1, 12),
+      HTTPCode_Target_2XX_Count: generateMockMetric('2XX Responses', 1400, 600, 12),
+      HTTPCode_Target_5XX_Count: generateMockMetric('5XX Errors', 15, 20, 12)
+    };
+
+    // RDS Metrics
+    const mockRdsMetrics = {
+      CPUUtilization: generateMockMetric('CPU Utilization (%)', 45, 25, 12),
+      DatabaseConnections: generateMockMetric('DB Connections', 35, 15, 12),
+      ReadIOPS: generateMockMetric('Read IOPS', 2500, 1000, 12),
+      WriteIOPS: generateMockMetric('Write IOPS', 800, 400, 12),
+      FreeableMemory: generateMockMetric('Freeable Memory (bytes)', 2147483648, 536870912, 12),
+      DiskQueueDepth: generateMockMetric('Disk Queue Depth', 2.5, 1.5, 12)
+    };
+
+    // VPC Stats
+    const mockVpcStats = {
+      total_flows: 450230,
+      accepted_flows: 398450,
+      rejected_flows: 51780,
+      byte_transfer: 15680345600, // ~14.6 GB
+      top_sources: [
+        ['10.0.1.15', 12450],
+        ['10.0.2.23', 9875],
+        ['10.0.1.8', 8640],
+        ['192.168.1.100', 7320],
+        ['10.0.3.45', 6890],
+        ['172.16.0.12', 5450],
+        ['10.0.1.200', 4890],
+        ['192.168.1.50', 4320]
+      ],
+      top_destinations: [
+        ['10.0.1.10', 15680],
+        ['10.0.2.15', 12340],
+        ['10.0.1.5', 11230],
+        ['192.168.1.1', 9870],
+        ['10.0.3.20', 8760],
+        ['172.16.0.5', 7650],
+        ['10.0.1.100', 6540],
+        ['192.168.1.10', 5430]
+      ],
+      top_ports: [
+        [80, 89450],
+        [443, 78960],
+        [22, 12340],
+        [3306, 8970],
+        [5432, 6780],
+        [8080, 5670],
+        [25, 3450],
+        [53, 2340]
+      ]
+    };
+
+    // Auto Scaling Group Metrics
+    const mockAsgMetrics = {
+      GroupDesiredCapacity: generateMockMetric('Desired Capacity', 3, 1, 12),
+      GroupInServiceInstances: generateMockMetric('In-Service Instances', 3, 1, 12),
+      GroupTotalInstances: generateMockMetric('Total Instances', 3, 1, 12)
+    };
+
+    // ML Service Metrics
+    const mockMlMetrics = {
+      'ModelLatency (ms)': generateMockMetric('Model Latency (ms)', 250, 100, 12),
+      Invocations: generateMockMetric('Invocations', 850, 300, 12),
+      CPUUtilization: generateMockMetric('CPU Utilization (%)', 65, 20, 12),
+      MemoryUtilization: generateMockMetric('Memory Utilization (%)', 42, 15, 12)
+    };
+
+    // Threat Classifications
+    const mockThreatClassifications = {
+      last_hour: [
+        { category: 'Malware Detection', count: 1247 },
+        { category: 'Suspicious Login Activity', count: 892 },
+        { category: 'SQL Injection Attempt', count: 634 },
+        { category: 'Cross-Site Scripting (XSS)', count: 445 },
+        { category: 'Brute Force Attack', count: 387 },
+        { category: 'Port Scanning', count: 298 },
+        { category: 'DDoS Attack Pattern', count: 234 },
+        { category: 'Data Exfiltration Attempt', count: 189 },
+        { category: 'Privilege Escalation', count: 156 },
+        { category: 'Unauthorized API Access', count: 123 },
+        { category: 'File Upload Vulnerability', count: 98 }
+      ],
+      last_day: [
+        { category: 'Malware Detection', count: 28940 },
+        { category: 'Suspicious Login Activity', count: 21340 },
+        { category: 'SQL Injection Attempt', count: 15230 },
+        { category: 'Cross-Site Scripting (XSS)', count: 10680 },
+        { category: 'Brute Force Attack', count: 9290 },
+        { category: 'Port Scanning', count: 7150 },
+        { category: 'DDoS Attack Pattern', count: 5620 },
+        { category: 'Data Exfiltration Attempt', count: 4530 },
+        { category: 'Privilege Escalation', count: 3740 },
+        { category: 'Unauthorized API Access', count: 2950 },
+        { category: 'File Upload Vulnerability', count: 2350 }
+      ]
+    };
+
+    // Security Events
+    const mockSecurityEvents = [
+      { event: 'Failed SSH authentication attempts', last_hour: 1456, last_day: 34944 },
+      { event: 'HTTP 403 Forbidden responses', last_hour: 892, last_day: 21408 },
+      { event: 'Unusual outbound data volume', last_hour: 634, last_day: 15216 },
+      { event: 'Multiple failed login attempts', last_hour: 445, last_day: 10680 },
+      { event: 'Suspicious user agent strings', last_hour: 387, last_day: 9288 },
+      { event: 'Blocked malicious IP addresses', last_hour: 298, last_day: 7152 },
+      { event: 'WAF rule violations', last_hour: 234, last_day: 5616 },
+      { event: 'Privilege escalation attempts', last_hour: 189, last_day: 4536 },
+      { event: 'Unauthorized file access', last_hour: 156, last_day: 3744 },
+      { event: 'Database connection anomalies', last_hour: 123, last_day: 2952 },
+      { event: 'SSL/TLS handshake failures', last_hour: 98, last_day: 2352 }
+    ];
+
+    return {
+      lbMetrics: mockLbMetrics,
+      rdsMetrics: mockRdsMetrics,
+      vpcStats: mockVpcStats,
+      asgMetrics: mockAsgMetrics,
+      mlMetrics: mockMlMetrics,
+      threatClassifications: mockThreatClassifications,
+      securityEvents: mockSecurityEvents
+    };
+  };
+
+  // Fetch all monitoring data from backend API or use mock data
+  const fetchAllData = async () => {
+    try {
+      if (USE_MOCK_DATA) {
+        // Use mock data for development/testing
+        console.log('Using mock data mode');
+        const mockData = generateMockData();
+        
+        setLbMetrics(mockData.lbMetrics);
+        setRdsMetrics(mockData.rdsMetrics);
+        setVpcStats(mockData.vpcStats);
+        setAsgMetrics(mockData.asgMetrics);
+        setMlMetrics(mockData.mlMetrics);
+        setThreatClassifications(mockData.threatClassifications);
+        setSecurityEvents(mockData.securityEvents);
+        setLoading(false);
+      } else {
+        // Fetch real data from backend API
+        console.log('Fetching data from backend API...');
+        await Promise.all([
+          fetchALBMetrics(),
+          fetchRDSMetrics(),
+          fetchVPCStats(),
+          fetchASGMetrics(),
+          fetchSageMakerMetrics(),
+          fetchThreatClassifications(),
+          fetchSecurityEvents()
+        ]);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      // Fallback to mock data on error
+      console.log('Falling back to mock data due to error');
+      const mockData = generateMockData();
+      setLbMetrics(mockData.lbMetrics);
+      setRdsMetrics(mockData.rdsMetrics);
+      setVpcStats(mockData.vpcStats);
+      setAsgMetrics(mockData.asgMetrics);
+      setMlMetrics(mockData.mlMetrics);
+      setThreatClassifications(mockData.threatClassifications);
+      setSecurityEvents(mockData.securityEvents);
+      setLoading(false);
+    }
+  };
+
+  // API call functions
   const fetchALBMetrics = async () => {
     try {
       const response = await api.get(`/metrics/alb?time_range=${timeRange}`);
       setLbMetrics(response.data);
     } catch (error) {
       console.error('Failed to fetch ALB metrics:', error);
-      setLbMetrics(null); // Set to null on error
+      throw error;
     }
   };
 
@@ -55,7 +233,7 @@ function AdvancedDashboard() {
       setRdsMetrics(response.data);
     } catch (error) {
       console.error('Failed to fetch RDS metrics:', error);
-      setRdsMetrics(null);
+      throw error;
     }
   };
 
@@ -65,7 +243,7 @@ function AdvancedDashboard() {
       setVpcStats(response.data);
     } catch (error) {
       console.error('Failed to fetch VPC stats:', error);
-      setVpcStats(null);
+      throw error;
     }
   };
 
@@ -75,7 +253,7 @@ function AdvancedDashboard() {
       setAsgMetrics(response.data);
     } catch (error) {
       console.error('Failed to fetch ASG metrics:', error);
-      setAsgMetrics(null);
+      throw error;
     }
   };
 
@@ -85,7 +263,7 @@ function AdvancedDashboard() {
       setMlMetrics(response.data);
     } catch (error) {
       console.error('Failed to fetch SageMaker metrics:', error);
-      setMlMetrics(null);
+      throw error;
     }
   };
 
@@ -95,7 +273,7 @@ function AdvancedDashboard() {
       setThreatClassifications(response.data);
     } catch (error) {
       console.error('Failed to fetch threat classifications:', error);
-      setThreatClassifications(null);
+      throw error;
     }
   };
 
@@ -105,7 +283,7 @@ function AdvancedDashboard() {
       setSecurityEvents(response.data);
     } catch (error) {
       console.error('Failed to fetch security events:', error);
-      setSecurityEvents(null);
+      throw error;
     }
   };
 
@@ -229,26 +407,13 @@ function AdvancedDashboard() {
     };
   };
 
-  if (loading && !lbMetrics && !rdsMetrics && !vpcStats) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-white text-xl mb-2">Loading Security Dashboard...</div>
-          <div className="text-gray-400 text-sm">Fetching data from backend API</div>
-        </div>
+        <div className="text-white text-xl">Loading Security Dashboard...</div>
       </div>
     );
   }
-
-  // Helper component for error display in sections
-  const ErrorPlaceholder = ({ message }) => (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center p-4">
-        <div className="text-red-400 text-2xl mb-2">⚠️</div>
-        <div className="text-gray-400 text-xs">{message}</div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
@@ -325,26 +490,22 @@ function AdvancedDashboard() {
               <h3 className="text-sm font-semibold text-gray-300">Top Classification</h3>
               <span className="text-xs text-gray-500">Last 1 Hour</span>
             </div>
-            {threatClassifications?.last_hour ? (
-              <div className="space-y-1">
-                {threatClassifications.last_hour.slice(0, 11).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400 truncate flex-1">{item.category}</span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-gray-200 font-medium">{item.count}</span>
-                      <div className="w-16 bg-gray-700 rounded-full h-2">
-                        <div 
-                          className="bg-blue-500 h-2 rounded-full"
-                          style={{ width: `${(item.count / threatClassifications.last_hour[0].count) * 100}%` }}
-                        ></div>
-                      </div>
+            <div className="space-y-1">
+              {threatClassifications?.last_hour.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400 truncate flex-1">{item.category}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-gray-200 font-medium">{item.count}</span>
+                    <div className="w-16 bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-blue-500 h-2 rounded-full"
+                        style={{ width: `${(item.count / threatClassifications.last_hour[0].count) * 100}%` }}
+                      ></div>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <ErrorPlaceholder message="Failed to load threat data" />
-            )}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Top Classification - Last 1 Day */}
@@ -353,26 +514,22 @@ function AdvancedDashboard() {
               <h3 className="text-sm font-semibold text-gray-300">Top Classification</h3>
               <span className="text-xs text-gray-500">Last 1 Day</span>
             </div>
-            {threatClassifications?.last_day ? (
-              <div className="space-y-1">
-                {threatClassifications.last_day.slice(0, 11).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400 truncate flex-1">{item.category}</span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-gray-200 font-medium">{item.count}</span>
-                      <div className="w-16 bg-gray-700 rounded-full h-2">
-                        <div 
-                          className="bg-orange-500 h-2 rounded-full"
-                          style={{ width: `${(item.count / threatClassifications.last_day[0].count) * 100}%` }}
-                        ></div>
-                      </div>
+            <div className="space-y-1">
+              {threatClassifications?.last_day.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400 truncate flex-1">{item.category}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-gray-200 font-medium">{item.count}</span>
+                    <div className="w-16 bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-orange-500 h-2 rounded-full"
+                        style={{ width: `${(item.count / threatClassifications.last_day[0].count) * 100}%` }}
+                      ></div>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <ErrorPlaceholder message="Failed to load threat data" />
-            )}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Top Log Source */}
@@ -437,18 +594,14 @@ function AdvancedDashboard() {
               <h3 className="text-sm font-semibold text-gray-300">Top Common Event</h3>
               <span className="text-xs text-gray-500">Last 1 Hour</span>
             </div>
-            {securityEvents ? (
-              <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
-                {securityEvents.slice(0, 11).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs py-1">
-                    <span className="text-gray-400 truncate flex-1 pr-2">{item.event}</span>
-                    <span className="text-gray-200 font-medium min-w-[40px] text-right">{item.last_hour}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <ErrorPlaceholder message="Failed to load security events" />
-            )}
+            <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
+              {securityEvents?.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs py-1">
+                  <span className="text-gray-400 truncate flex-1 pr-2">{item.event}</span>
+                  <span className="text-gray-200 font-medium min-w-[40px] text-right">{item.last_hour}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Top Common Event - Last 1 Day */}
@@ -457,18 +610,14 @@ function AdvancedDashboard() {
               <h3 className="text-sm font-semibold text-gray-300">Top Common Event</h3>
               <span className="text-xs text-gray-500">Last 1 Day</span>
             </div>
-            {securityEvents ? (
-              <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
-                {securityEvents.slice(0, 11).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs py-1">
-                    <span className="text-gray-400 truncate flex-1 pr-2">{item.event}</span>
-                    <span className="text-gray-200 font-medium min-w-[50px] text-right">{item.last_day}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <ErrorPlaceholder message="Failed to load security events" />
-            )}
+            <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
+              {securityEvents?.slice(0, 11).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs py-1">
+                  <span className="text-gray-400 truncate flex-1 pr-2">{item.event}</span>
+                  <span className="text-gray-200 font-medium min-w-[50px] text-right">{item.last_day}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Additional Log Source Chart */}
@@ -530,10 +679,8 @@ function AdvancedDashboard() {
             <div className="bg-gray-900 rounded p-3 border border-gray-700">
               <h4 className="text-xs text-gray-400 mb-2">Request Count</h4>
               <div className="h-32">
-                {lbMetrics?.RequestCount ? (
+                {lbMetrics?.RequestCount && (
                   <Line data={generateLineChart(lbMetrics.RequestCount, '#10B981')} options={darkChartOptions} />
-                ) : (
-                  <ErrorPlaceholder message="No ALB data" />
                 )}
               </div>
             </div>
@@ -541,10 +688,8 @@ function AdvancedDashboard() {
             <div className="bg-gray-900 rounded p-3 border border-gray-700">
               <h4 className="text-xs text-gray-400 mb-2">Target Response Time</h4>
               <div className="h-32">
-                {lbMetrics?.TargetResponseTime ? (
+                {lbMetrics?.TargetResponseTime && (
                   <Line data={generateLineChart(lbMetrics.TargetResponseTime, '#3B82F6')} options={darkChartOptions} />
-                ) : (
-                  <ErrorPlaceholder message="No ALB data" />
                 )}
               </div>
             </div>
