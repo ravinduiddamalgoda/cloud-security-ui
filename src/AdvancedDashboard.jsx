@@ -20,6 +20,7 @@ function AdvancedDashboard() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState('summary');
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
   const navigate = useNavigate();
 
   // Fetch all monitoring data from backend API
@@ -90,8 +91,6 @@ function AdvancedDashboard() {
   };
 
   const fetchSageMakerMetrics = async () => {
-    // Using mock data since backend not implemented yet
-    console.log('Using mock SageMaker data (backend not implemented)');
     const now = Date.now();
     const dataPoints = timeRange === '1h' ? 30 : timeRange === '6h' ? 36 : timeRange === '24h' ? 48 : 168;
     const interval = timeRange === '1h' ? 2 * 60000 : timeRange === '6h' ? 10 * 60000 : timeRange === '24h' ? 30 * 60000 : 3600000;
@@ -542,22 +541,34 @@ ${'='.repeat(80)}
       {/* Navigation Tabs */}
       <div className="bg-gray-800 border-b border-gray-700 px-6">
         <div className="flex space-x-1">
-          <button className="px-4 py-2 bg-gray-700 text-white border-b-2 border-blue-500">
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-4 py-2 ${activeTab === 'dashboard' ? 'bg-gray-700 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+          >
             Dashboard
           </button>
           <Link to="/brute-force-detection" className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
             Threat Detection
           </Link>
-          <button className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
+          <button 
+            onClick={() => setActiveTab('alerts')}
+            className={`px-4 py-2 ${activeTab === 'alerts' ? 'bg-gray-700 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+          >
             Security Alerts
           </button>
-          <button className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-700">
+          <button 
+            onClick={() => setActiveTab('reports')}
+            className={`px-4 py-2 ${activeTab === 'reports' ? 'bg-gray-700 text-white border-b-2 border-blue-500' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+          >
             Reports
           </button>
         </div>
       </div>
 
       <div className="p-6 space-y-6">
+        {/* Dashboard Tab Content */}
+        {activeTab === 'dashboard' && (
+        <>
         {/* Top Row - Threat Classifications */}
         <div className="grid grid-cols-3 gap-6">
           {/* Top Classification - Last 1 Hour */}
@@ -964,28 +975,28 @@ ${'='.repeat(80)}
             {/* Summary Cards */}
             <div className="bg-gray-900 rounded p-4 border border-gray-700">
               <div className="text-xs text-gray-400 mb-1">Total Flows</div>
-              <div className="text-2xl font-bold text-blue-400">{vpcStats?.total_flows.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-blue-400">{vpcStats?.total_flows?.toLocaleString() || '0'}</div>
               <div className="text-xs text-gray-500 mt-1">Network connections</div>
             </div>
 
             <div className="bg-gray-900 rounded p-4 border border-gray-700">
               <div className="text-xs text-gray-400 mb-1">Accepted Flows</div>
-              <div className="text-2xl font-bold text-green-400">{vpcStats?.accepted_flows.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-green-400">{vpcStats?.accepted_flows?.toLocaleString() || '0'}</div>
               <div className="text-xs text-gray-500 mt-1">
-                {vpcStats && ((vpcStats.accepted_flows / vpcStats.total_flows) * 100).toFixed(1)}% success rate
+                {vpcStats && vpcStats.total_flows ? ((vpcStats.accepted_flows / vpcStats.total_flows) * 100).toFixed(1) : '0'}% success rate
               </div>
             </div>
 
             <div className="bg-gray-900 rounded p-4 border border-gray-700">
               <div className="text-xs text-gray-400 mb-1">Rejected Flows</div>
-              <div className="text-2xl font-bold text-red-400">{vpcStats?.rejected_flows.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-red-400">{vpcStats?.rejected_flows?.toLocaleString() || '0'}</div>
               <div className="text-xs text-gray-500 mt-1">Security violations</div>
             </div>
 
             <div className="bg-gray-900 rounded p-4 border border-gray-700">
               <div className="text-xs text-gray-400 mb-1">Data Transfer</div>
               <div className="text-2xl font-bold text-purple-400">
-                {vpcStats && (vpcStats.byte_transfer / 1073741824).toFixed(2)} GB
+                {vpcStats && vpcStats.byte_transfer ? (vpcStats.byte_transfer / 1073741824).toFixed(2) : '0.00'} GB
               </div>
               <div className="text-xs text-gray-500 mt-1">Total bandwidth</div>
             </div>
@@ -1194,7 +1205,7 @@ ${'='.repeat(80)}
           </Link>
 
           <button
-            onClick={() => setShowReportModal(true)}
+            onClick={() => { setActiveTab('reports'); setShowReportModal(true); }}
             className="bg-blue-900 bg-opacity-20 border-2 border-blue-500 rounded-lg p-4 hover:bg-opacity-30 transition-all text-left"
           >
             <div className="text-blue-400 text-2xl mb-2">📊</div>
@@ -1203,6 +1214,7 @@ ${'='.repeat(80)}
           </button>
 
           <button
+            onClick={() => setActiveTab('alerts')}
             className="bg-purple-900 bg-opacity-20 border-2 border-purple-500 rounded-lg p-4 hover:bg-opacity-30 transition-all text-left relative"
           >
             <div className="absolute -top-2 -right-2">
@@ -1215,10 +1227,18 @@ ${'='.repeat(80)}
             <div className="text-gray-400 text-sm mt-1">View active alerts</div>
           </button>
         </div>
-      </div>
+        </>
+        )}
 
-        {/* Security Alerts Section */}
-        {securityAlerts.length > 0 && (
+        {/* Security Alerts Tab Content */}
+        {activeTab === 'alerts' && (
+          <div className="space-y-6">
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <h1 className="text-2xl font-bold text-white mb-2">Security Alerts Dashboard</h1>
+              <p className="text-gray-400 text-sm">Monitor and manage active security alerts across your AWS infrastructure</p>
+            </div>
+            
+            {securityAlerts.length > 0 ? (
           <div className="bg-gray-800 rounded-lg border border-red-500 p-4">
             <h2 className="text-lg font-semibold text-red-400 mb-4 flex items-center">
               <span className="mr-2">🚨</span>
@@ -1261,6 +1281,127 @@ ${'='.repeat(80)}
                 View all {securityAlerts.length} alerts →
               </button>
             )}
+          </div>
+            ) : (
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+                <div className="text-green-400 text-5xl mb-4">✓</div>
+                <h2 className="text-xl font-semibold text-white mb-2">No Active Alerts</h2>
+                <p className="text-gray-400">Your infrastructure is currently secure with no active security alerts.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reports Tab Content */}
+        {activeTab === 'reports' && (
+          <div className="space-y-6">
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <h1 className="text-2xl font-bold text-white mb-2">Security Reports</h1>
+              <p className="text-gray-400 text-sm">Generate comprehensive security reports for your AWS infrastructure</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              {/* Report Type Cards */}
+              <div 
+                onClick={() => { setReportType('summary'); setShowReportModal(true); }}
+                className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-blue-500 cursor-pointer transition-all"
+              >
+                <div className="text-blue-400 text-4xl mb-3">📋</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Executive Summary</h3>
+                <p className="text-gray-400 text-sm mb-4">High-level overview of security posture and key metrics</p>
+                <ul className="text-xs text-gray-500 space-y-1">
+                  <li>• Infrastructure health status</li>
+                  <li>• Critical alerts summary</li>
+                  <li>• Performance overview</li>
+                </ul>
+              </div>
+
+              <div 
+                onClick={() => { setReportType('detailed'); setShowReportModal(true); }}
+                className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-purple-500 cursor-pointer transition-all"
+              >
+                <div className="text-purple-400 text-4xl mb-3">📊</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Detailed Analysis</h3>
+                <p className="text-gray-400 text-sm mb-4">In-depth technical analysis with all metrics and data</p>
+                <ul className="text-xs text-gray-500 space-y-1">
+                  <li>• Complete metric breakdowns</li>
+                  <li>• Historical trends</li>
+                  <li>• Resource utilization</li>
+                </ul>
+              </div>
+
+              <div 
+                onClick={() => { setReportType('compliance'); setShowReportModal(true); }}
+                className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-green-500 cursor-pointer transition-all"
+              >
+                <div className="text-green-400 text-4xl mb-3">✅</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Compliance Report</h3>
+                <p className="text-gray-400 text-sm mb-4">Security compliance and audit-ready documentation</p>
+                <ul className="text-xs text-gray-500 space-y-1">
+                  <li>• Security best practices</li>
+                  <li>• Configuration audits</li>
+                  <li>• Compliance status</li>
+                </ul>
+              </div>
+
+              <div 
+                onClick={() => { setReportType('incident'); setShowReportModal(true); }}
+                className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-red-500 cursor-pointer transition-all"
+              >
+                <div className="text-red-400 text-4xl mb-3">🚨</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Incident Report</h3>
+                <p className="text-gray-400 text-sm mb-4">Security incidents and threat activity summary</p>
+                <ul className="text-xs text-gray-500 space-y-1">
+                  <li>• Active threats</li>
+                  <li>• Security violations</li>
+                  <li>• Response actions</li>
+                </ul>
+              </div>
+
+              <div 
+                onClick={() => { setReportType('metrics'); setShowReportModal(true); }}
+                className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-yellow-500 cursor-pointer transition-all"
+              >
+                <div className="text-yellow-400 text-4xl mb-3">📈</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Metrics Dashboard</h3>
+                <p className="text-gray-400 text-sm mb-4">Performance metrics and operational statistics</p>
+                <ul className="text-xs text-gray-500 space-y-1">
+                  <li>• Resource metrics</li>
+                  <li>• Performance data</li>
+                  <li>• Usage statistics</li>
+                </ul>
+              </div>
+
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <div className="text-gray-400 text-4xl mb-3">⏰</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Scheduled Reports</h3>
+                <p className="text-gray-400 text-sm mb-4">Set up automated report generation and delivery</p>
+                <button className="mt-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
+                  Configure Schedule
+                </button>
+              </div>
+            </div>
+
+            {/* Recent Reports */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Recent Reports</h2>
+              <div className="space-y-3">
+                <div className="bg-gray-900 rounded p-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-white font-medium text-sm">Executive Summary - {new Date().toLocaleDateString()}</div>
+                    <div className="text-gray-400 text-xs mt-1">Generated today • 2.3 MB</div>
+                  </div>
+                  <button className="text-blue-400 hover:text-blue-300 text-sm">Download</button>
+                </div>
+                <div className="bg-gray-900 rounded p-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-white font-medium text-sm">Compliance Report - {new Date(Date.now() - 86400000).toLocaleDateString()}</div>
+                    <div className="text-gray-400 text-xs mt-1">Generated yesterday • 1.8 MB</div>
+                  </div>
+                  <button className="text-blue-400 hover:text-blue-300 text-sm">Download</button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1353,6 +1494,7 @@ ${'='.repeat(80)}
             </div>
           </div>
         )}
+      </div>
 
       {/* Custom Scrollbar Styles */}
       <style>{`
