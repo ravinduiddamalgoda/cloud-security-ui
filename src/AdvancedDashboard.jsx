@@ -1010,8 +1010,8 @@ ${'='.repeat(80)}
                 <div className="space-y-2">
                   {vpcStats.top_sources.slice(0, 8).map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-300 font-mono">{item.ip}</span>
-                      <span className="text-blue-400">{item.count.toLocaleString()}</span>
+                      <span className="text-gray-300 font-mono">{item?.ip || 'N/A'}</span>
+                      <span className="text-blue-400">{item?.count?.toLocaleString() || '0'}</span>
                     </div>
                   ))}
                 </div>
@@ -1027,8 +1027,8 @@ ${'='.repeat(80)}
                 <div className="space-y-2">
                   {vpcStats.top_destinations.slice(0, 8).map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-300 font-mono">{item.ip}</span>
-                      <span className="text-green-400">{item.count.toLocaleString()}</span>
+                      <span className="text-gray-300 font-mono">{item?.ip || 'N/A'}</span>
+                      <span className="text-green-400">{item?.count?.toLocaleString() || '0'}</span>
                     </div>
                   ))}
                 </div>
@@ -1044,8 +1044,8 @@ ${'='.repeat(80)}
                 <div className="space-y-2">
                   {vpcStats.top_ports.map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-300 font-mono">Port {item.port}</span>
-                      <span className="text-purple-400">{item.count.toLocaleString()}</span>
+                      <span className="text-gray-300 font-mono">Port {item?.port || 'N/A'}</span>
+                      <span className="text-purple-400">{item?.count?.toLocaleString() || '0'}</span>
                     </div>
                   ))}
                 </div>
